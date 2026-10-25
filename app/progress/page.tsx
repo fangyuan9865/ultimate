@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,101 +12,102 @@ type PracticeEntry = {
 
 const STORAGE_KEY = "ultimate-progress";
 
-const weeklyDays = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function getDayStart(date: Date) {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate()
-  );
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function getMonday(date: Date) {
-  const result = getDayStart(date);
+function getMonday(date: Date): Date {
+  const result = startOfDay(date);
   const day = result.getDay();
-  result.setDate(result.getDate() - (day === 0 ? 6 : day - 1));
+  const difference = day === 0 ? -6 : 1 - day;
+
+  result.setDate(result.getDate() + difference);
   return result;
-}
-
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Recently completed";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function readProgress(): PracticeEntry[] {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY);
 
-    if (!saved) {
+    if (!stored) {
       return [];
     }
 
-    const parsed: unknown = JSON.parse(saved);
+    const parsed: unknown = JSON.parse(stored);
 
     if (!Array.isArray(parsed)) {
       return [];
     }
 
     return parsed.filter(
-      (entry): entry is PracticeEntry =>
-        entry !== null &&
-        typeof entry === "object" &&
-        typeof entry.slug === "string" &&
-        typeof entry.title === "string" &&
-        typeof entry.category === "string" &&
-        typeof entry.duration === "number" &&
-        Number.isFinite(entry.duration) &&
-        entry.duration >= 0 &&
-        typeof entry.completedAt === "string"
+      (item): item is PracticeEntry =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.slug === "string" &&
+        typeof item.title === "string" &&
+        typeof item.category === "string" &&
+        typeof item.duration === "number" &&
+        typeof item.completedAt === "string"
     );
   } catch {
     return [];
   }
 }
 
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getActivityIcon(category: string): string {
+  switch (category.toLowerCase()) {
+    case "yoga":
+      return "◉";
+    case "meditation":
+      return "☼";
+    case "breathing":
+      return "≈";
+    case "mindfulness":
+      return "✳";
+    default:
+      return "✦";
+  }
+}
+
 export default function ProgressPage() {
   const [entries, setEntries] = useState<PracticeEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [weekStart, setWeekStart] = useState<Date | null>(null);
+  const [today, setToday] = useState<Date | null>(null);
 
   useEffect(() => {
+    const now = new Date();
+
+    setWeekStart(getMonday(now));
+    setToday(startOfDay(now));
     setEntries(readProgress());
     setLoaded(true);
   }, []);
 
-  const totalMinutes = entries.reduce(
-    (total, entry) => total + entry.duration,
-    0
-  );
-
-  const weekStart = getMonday(new Date());
-  const today = getDayStart(new Date());
-
   const weeklyEntries = entries.filter((entry) => {
-    const date = new Date(entry.completedAt);
+    if (!weekStart) {
+      return false;
+    }
 
-    return (
-      !Number.isNaN(date.getTime()) &&
-      getDayStart(date).getTime() >= weekStart.getTime() &&
-      getDayStart(date).getTime() <= today.getTime()
-    );
+    const completedDate = new Date(entry.completedAt);
+
+    if (Number.isNaN(completedDate.getTime())) {
+      return false;
+    }
+
+    const nextWeek = new Date(weekStart);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    return completedDate >= weekStart && completedDate < nextWeek;
   });
 
   const weeklyMinutes = weeklyEntries.reduce(
@@ -115,37 +115,61 @@ export default function ProgressPage() {
     0
   );
 
-  const dailyActivity = weeklyDays.map((day, index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
+  const totalMinutes = entries.reduce(
+    (total, entry) => total + entry.duration,
+    0
+  );
 
-    const dayEntries = weeklyEntries.filter((entry) => {
+  const todayEntries = entries.filter((entry) => {
+    if (!today) {
+      return false;
+    }
+
+    const completedDate = new Date(entry.completedAt);
+
+    if (Number.isNaN(completedDate.getTime())) {
+      return false;
+    }
+
+    return startOfDay(completedDate).getTime() === today.getTime();
+  });
+
+  const chartData = WEEKDAYS.map((day, index) => {
+    const date = weekStart ? new Date(weekStart) : null;
+
+    if (date) {
+      date.setDate(date.getDate() + index);
+    }
+
+    const sessions = weeklyEntries.filter((entry) => {
+      if (!date) {
+        return false;
+      }
+
       const completedDate = new Date(entry.completedAt);
 
-      return (
-        !Number.isNaN(completedDate.getTime()) &&
-        getDayStart(completedDate).getTime() === date.getTime()
-      );
+      if (Number.isNaN(completedDate.getTime())) {
+        return false;
+      }
+
+      return startOfDay(completedDate).getTime() === date.getTime();
     });
 
     return {
       day,
-      shortDay: day.slice(0, 3),
-      minutes: dayEntries.reduce(
-        (total, entry) => total + entry.duration,
-        0
-      ),
-      sessions: dayEntries.length,
-      isFuture: date.getTime() > today.getTime(),
+      date,
+      minutes: sessions.reduce((total, entry) => total + entry.duration, 0),
+      count: sessions.length,
     };
   });
 
-  const maxDailyMinutes = Math.max(
-    1,
-    ...dailyActivity.map((day) => day.minutes)
+  const maxMinutes = Math.max(
+    10,
+    ...chartData.map((item) => item.minutes)
   );
 
   const recentEntries = [...entries]
+    .filter((entry) => !Number.isNaN(new Date(entry.completedAt).getTime()))
     .sort(
       (a, b) =>
         new Date(b.completedAt).getTime() -
@@ -153,313 +177,318 @@ export default function ProgressPage() {
     )
     .slice(0, 5);
 
-  const todaySessions = entries.filter((entry) => {
-    const date = new Date(entry.completedAt);
-
+  if (!loaded || !weekStart || !today) {
     return (
-      !Number.isNaN(date.getTime()) &&
-      getDayStart(date).getTime() === today.getTime()
+      <main className="min-h-screen bg-[#F8F7F2] px-6 py-20 text-center text-[#526653]">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#DCE5D8] border-t-[#526653]" />
+        <p className="mt-4 text-sm">Loading your progress...</p>
+      </main>
     );
-  }).length;
+  }
 
   return (
-    <main className="min-h-screen bg-[#FAF8F2] text-[#292D2A]">
-      <header className="border-b border-[#29483B]/10 bg-[#FAF8F2]/90">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-          <a href="/" className="flex shrink-0 items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#29483B] text-xl text-white">
-              ✿
+    <main className="min-h-screen bg-[#F8F7F2] text-[#263A2D]">
+      <header className="sticky top-0 z-20 border-b border-[#E8E8DF] bg-[#F8F7F2]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
+          <a href="/" className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#DCE5D8] text-xl text-[#355640]">
+              ✳
             </span>
-            <span className="font-semibold tracking-[0.15em]">
+
+            <span className="text-xl font-semibold tracking-[0.18em]">
               ULTIMATE
             </span>
           </a>
 
-          <nav className="flex items-center gap-4 text-sm sm:gap-7">
-            <a
-              href="/explore"
-              className="text-[#626960] transition hover:text-[#29483B]"
-            >
+          <nav className="flex flex-wrap items-center justify-end gap-5 text-sm text-[#687568]">
+            <a href="/explore" className="transition hover:text-[#263A2D]">
               Explore
             </a>
+
+            <a href="/favorites" className="transition hover:text-[#263A2D]">
+              Favorites
+            </a>
+
             <a
               href="/progress"
-              aria-current="page"
-              className="font-semibold text-[#29483B]"
+              className="font-semibold text-[#355640]"
             >
               Progress
+            </a>
+
+            <a href="/profile" className="transition hover:text-[#263A2D]">
+              Profile
+            </a>
+
+            <a href="/settings" className="transition hover:text-[#263A2D]">
+              Settings
             </a>
           </nav>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
+      <section className="mx-auto max-w-7xl px-6 py-12 md:py-16">
         <div className="mb-10">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-[#68816B]">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#80917D]">
             Your wellness journey
           </p>
 
-          <h1 className="mt-3 font-serif text-4xl leading-tight sm:text-5xl">
-            Every little step counts.
+          <h1 className="text-4xl font-medium tracking-tight md:text-5xl">
+            Your progress
           </h1>
 
-          <p className="mt-4 max-w-2xl leading-7 text-[#626960]">
-            Take a moment to reflect on your practice, celebrate
-            your progress, and make space for yourself.
+          <p className="mt-4 max-w-xl leading-7 text-[#788176]">
+            Every little moment counts. Take a look at the time you have
+            dedicated to yourself and celebrate the progress you are making.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-3xl bg-[#E9EDE2] p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#526456]">
-                Practices completed
-              </span>
-              <span className="text-2xl text-[#29483B]">✧</span>
-            </div>
+        <div className="mb-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Today's sessions"
+            value={String(todayEntries.length)}
+            detail="Moments for yourself"
+            icon="☼"
+          />
 
-            <p className="mt-5 text-4xl font-semibold text-[#29483B]">
-              {loaded ? entries.length : "—"}
-            </p>
+          <StatCard
+            label="This week's sessions"
+            value={String(weeklyEntries.length)}
+            detail="Your weekly practice"
+            icon="✳"
+          />
 
-            <p className="mt-2 text-sm text-[#526456]">
-              Every session matters
-            </p>
-          </div>
+          <StatCard
+            label="Minutes this week"
+            value={String(weeklyMinutes)}
+            detail="Time invested in you"
+            icon="◷"
+          />
 
-          <div className="rounded-3xl bg-[#F3E7E3] p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#765B50]">
-                Minutes practised
-              </span>
-              <span className="text-2xl text-[#765B50]">◷</span>
-            </div>
-
-            <p className="mt-5 text-4xl font-semibold text-[#765B50]">
-              {loaded ? totalMinutes : "—"}
-            </p>
-
-            <p className="mt-2 text-sm text-[#765B50]">
-              Time dedicated to you
-            </p>
-          </div>
-
-          <div className="rounded-3xl bg-[#EAE6F2] p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#625577]">
-                This week
-              </span>
-              <span className="text-2xl text-[#625577]">↗</span>
-            </div>
-
-            <p className="mt-5 text-4xl font-semibold text-[#625577]">
-              {loaded ? weeklyEntries.length : "—"}
-            </p>
-
-            <p className="mt-2 text-sm text-[#625577]">
-              Completed sessions this week
-            </p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-6 ring-1 ring-[#29483B]/10">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#626960]">
-                Today
-              </span>
-              <span className="text-2xl text-[#68816B]">♡</span>
-            </div>
-
-            <p className="mt-5 text-4xl font-semibold text-[#29483B]">
-              {loaded ? todaySessions : "—"}
-            </p>
-
-            <p className="mt-2 text-sm text-[#626960]">
-              Sessions completed today
-            </p>
-          </div>
+          <StatCard
+            label="Total minutes"
+            value={String(totalMinutes)}
+            detail="Every minute matters"
+            icon="♡"
+          />
         </div>
 
-        <div className="mt-8 grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]">
-          <section className="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]">
+          <section className="rounded-[28px] border border-[#E8E8DF] bg-white p-6 shadow-sm md:p-8">
+            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="font-serif text-2xl">
-                  Your weekly rhythm
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-[#626960]">
-                  Your practice minutes, day by day.
+                <h2 className="text-xl font-semibold">Your weekly rhythm</h2>
+
+                <p className="mt-2 text-sm text-[#899184]">
+                  Minutes spent practicing each day
                 </p>
               </div>
 
-              <span className="rounded-full bg-[#E9EDE2] px-3 py-1.5 text-xs font-medium text-[#29483B]">
-                This week
+              <span className="rounded-full bg-[#EDF1E9] px-4 py-2 text-xs font-medium text-[#526653]">
+                {formatDate(weekStart)} –{" "}
+                {formatDate(
+                  new Date(
+                    weekStart.getFullYear(),
+                    weekStart.getMonth(),
+                    weekStart.getDate() + 6
+                  )
+                )}
               </span>
             </div>
 
-            <div className="mt-8 flex h-48 items-end gap-2 sm:gap-4">
-              {dailyActivity.map((day) => {
-                const barHeight =
-                  day.minutes === 0
-                    ? 4
-                    : Math.max(
-                        8,
-                        (day.minutes / maxDailyMinutes) * 100
-                      );
+            <div className="flex h-56 items-end justify-between gap-3 border-b border-[#E8E8DF] pb-3">
+              {chartData.map((item) => {
+                const height =
+                  item.minutes > 0
+                    ? Math.max((item.minutes / maxMinutes) * 100, 6)
+                    : 3;
+
+                const isToday =
+                  item.date !== null &&
+                  item.date.getTime() === today.getTime();
 
                 return (
                   <div
-                    key={day.day}
-                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-3"
+                    key={item.day}
+                    className="flex h-full flex-1 flex-col items-center justify-end gap-3"
                   >
-                    <span className="text-xs text-[#626960]">
-                      {day.minutes > 0 ? `${day.minutes}m` : ""}
+                    <span className="text-xs font-medium text-[#71806E]">
+                      {item.minutes > 0 ? item.minutes : ""}
                     </span>
 
-                    <div className="flex h-32 w-full items-end">
+                    <div className="flex h-36 w-full items-end justify-center">
                       <div
-                        title={`${day.day}: ${day.minutes} minutes`}
-                        className={`w-full rounded-t-xl transition-all duration-500 ${
-                          day.isFuture
-                            ? "bg-[#F1EFE8]"
-                            : day.minutes > 0
-                              ? "bg-[#68816B]"
-                              : "bg-[#E9EDE2]"
+                        title={`${item.minutes} minutes`}
+                        className={`w-full max-w-10 rounded-t-xl transition-all duration-500 ${
+                          item.minutes > 0
+                            ? isToday
+                              ? "bg-[#456B50]"
+                              : "bg-[#B9CCB4]"
+                            : "bg-[#EDF0E9]"
                         }`}
-                        style={{ height: `${barHeight}%` }}
+                        style={{ height: `${height}%` }}
                       />
                     </div>
 
-                    <span className="text-xs text-[#626960]">
-                      {day.shortDay}
+                    <span
+                      className={`text-xs ${
+                        isToday
+                          ? "font-semibold text-[#355640]"
+                          : "text-[#92998E]"
+                      }`}
+                    >
+                      {item.day}
                     </span>
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-6 flex items-center justify-between border-t border-[#29483B]/10 pt-5">
-              <span className="text-sm text-[#626960]">
-                Weekly practice time
+            <div className="mt-5 flex items-center justify-between gap-4 text-sm text-[#899184]">
+              <span>
+                {weeklyEntries.length}{" "}
+                {weeklyEntries.length === 1 ? "session" : "sessions"} this week
               </span>
-              <span className="font-semibold text-[#29483B]">
-                {loaded ? `${weeklyMinutes} min` : "—"}
-              </span>
+
+              <span>{weeklyMinutes} minutes total</span>
             </div>
           </section>
 
-          <section className="rounded-3xl bg-[#29483B] p-6 text-white sm:p-8">
-            <span className="text-3xl">✿</span>
+          <section className="rounded-[28px] bg-[#E6EDE1] p-7 md:p-8">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-white/70 text-2xl text-[#526653]">
+              ☘
+            </div>
 
-            <h2 className="mt-5 font-serif text-2xl">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#71836D]">
               A gentle reminder
+            </p>
+
+            <h2 className="text-2xl font-medium leading-snug">
+              Progress is not about perfection.
             </h2>
 
-            <p className="mt-4 leading-7 text-white/80">
-              Your wellness journey is your own. You do not
-              need to do everything at once. Small, consistent
-              moments of care can be meaningful.
+            <p className="mt-4 text-sm leading-7 text-[#71806E]">
+              Some days you will do more, and some days you will do less.
+              Showing up for yourself in whatever way you can is what matters.
             </p>
 
             <a
               href="/explore"
-              className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#FAF8F2] px-6 py-3 text-sm font-semibold text-[#29483B] transition hover:bg-white"
+              className="mt-7 inline-flex items-center justify-center rounded-full bg-[#355640] px-6 py-3 text-sm font-medium text-white transition hover:bg-[#263F2E]"
             >
-              Explore practices
-              <span aria-hidden="true">→</span>
+              Find your next practice <span className="ml-2">→</span>
             </a>
           </section>
         </div>
 
-        <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <section className="mt-8 rounded-[28px] border border-[#E8E8DF] bg-white p-6 shadow-sm md:p-8">
+          <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="font-serif text-2xl">
-                Recent practices
-              </h2>
-              <p className="mt-2 text-sm text-[#626960]">
-                A record of the sessions you have completed.
+              <h2 className="text-xl font-semibold">Recent practices</h2>
+
+              <p className="mt-2 text-sm text-[#899184]">
+                A little collection of moments you have made time for.
               </p>
             </div>
 
-            <span className="rounded-full bg-[#F7F5EF] px-3 py-1.5 text-xs text-[#626960]">
-              {loaded ? `${entries.length} total` : "Loading"}
-            </span>
+            <a
+              href="/explore"
+              className="text-sm font-medium text-[#526653] transition hover:text-[#263A2D]"
+            >
+              Explore practices →
+            </a>
           </div>
 
-          {!loaded ? (
-            <div className="mt-8 rounded-2xl bg-[#F7F5EF] p-8 text-center text-[#626960]">
-              Loading your progress...
-            </div>
-          ) : recentEntries.length === 0 ? (
-            <div className="mt-8 rounded-2xl bg-[#F7F5EF] px-5 py-10 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#E9EDE2] text-3xl text-[#29483B]">
-                ♡
-              </div>
+          {recentEntries.length === 0 ? (
+            <div className="rounded-2xl bg-[#F8F7F2] px-6 py-12 text-center">
+              <div className="mb-4 text-3xl text-[#80917D]">✳</div>
 
-              <h3 className="mt-5 font-serif text-xl">
+              <h3 className="text-lg font-medium">
                 Your journey starts here
               </h3>
 
-              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#626960]">
-                Once you complete a practice, it will appear here.
-                Your practice history and totals will update
-                automatically.
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#899184]">
+                Once you complete a practice, it will appear here. Start with
+                something small and make a little space for yourself.
               </p>
 
               <a
                 href="/explore"
-                className="mt-6 inline-flex rounded-full bg-[#29483B] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#203A30]"
+                className="mt-6 inline-flex rounded-full bg-[#355640] px-6 py-3 text-sm font-medium text-white transition hover:bg-[#263F2E]"
               >
-                Find your first practice
+                Explore practices
               </a>
             </div>
           ) : (
-            <div className="mt-6 divide-y divide-[#29483B]/10">
+            <div className="divide-y divide-[#ECEDE6]">
               {recentEntries.map((entry, index) => (
                 <a
                   key={`${entry.slug}-${entry.completedAt}-${index}`}
                   href={`/practice/${entry.slug}`}
-                  className="flex items-center gap-4 py-5 transition hover:bg-[#FAF8F2]"
+                  className="group flex items-center gap-4 py-5 first:pt-0 last:pb-0"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#E9EDE2] text-xl text-[#29483B]">
-                    {entry.category === "Yoga"
-                      ? "☀"
-                      : entry.category === "Meditation"
-                        ? "✧"
-                        : entry.category === "Breathing"
-                          ? "◉"
-                          : "♡"}
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EDF1E9] text-xl text-[#526653]">
+                    {getActivityIcon(entry.category)}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-medium text-[#292D2A]">
+                    <h3 className="truncate font-medium transition group-hover:text-[#526653]">
                       {entry.title}
                     </h3>
 
-                    <p className="mt-1 text-sm text-[#626960]">
-                      {entry.category} · {formatDate(entry.completedAt)}
+                    <p className="mt-1 text-sm text-[#899184]">
+                      {entry.category} ·{" "}
+                      {formatDate(new Date(entry.completedAt))}
                     </p>
                   </div>
 
                   <div className="shrink-0 text-right">
-                    <p className="font-semibold text-[#29483B]">
-                      {entry.duration} min
-                    </p>
-                    <p className="mt-1 text-xs text-[#68816B]">
-                      Completed
-                    </p>
+                    <p className="font-medium">{entry.duration} min</p>
+
+                    <p className="mt-1 text-xs text-[#899184]">Completed</p>
                   </div>
+
+                  <span className="ml-1 text-[#9BA597] transition group-hover:translate-x-1 group-hover:text-[#526653]">
+                    →
+                  </span>
                 </a>
               ))}
             </div>
           )}
         </section>
 
-        <p className="mt-8 text-center text-xs leading-6 text-[#85877F]">
-          Your progress is currently stored in this browser on this device.
-          It is not yet synced across devices or accounts.
-        </p>
+        <footer className="mt-12 border-t border-[#E8E8DF] pt-6 text-center text-xs text-[#9AA093]">
+          Small steps, meaningful change. Keep going at your own pace.
+        </footer>
       </section>
     </main>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+  icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: string;
+}) {
+  return (
+    <div className="rounded-[24px] border border-[#E8E8DF] bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-md">
+      <div className="mb-5 flex items-center justify-between">
+        <span className="text-sm text-[#899184]">{label}</span>
+
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EDF1E9] text-lg text-[#526653]">
+          {icon}
+        </span>
+      </div>
+
+      <p className="text-3xl font-semibold tracking-tight">{value}</p>
+
+      <p className="mt-2 text-xs text-[#899184]">{detail}</p>
+    </div>
   );
 }
