@@ -10,6 +10,12 @@ type PracticeEntry = {
   completedAt: string;
 };
 
+type ChartDay = {
+  day: string;
+  date: Date | null;
+  minutes: number;
+};
+
 const STORAGE_KEY = "ultimate-progress";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -21,9 +27,7 @@ function startOfDay(date: Date): Date {
 function getMonday(date: Date): Date {
   const result = startOfDay(date);
   const day = result.getDay();
-  const difference = day === 0 ? -6 : 1 - day;
-
-  result.setDate(result.getDate() + difference);
+  result.setDate(result.getDate() + (day === 0 ? -6 : 1 - day));
   return result;
 }
 
@@ -42,14 +46,21 @@ function readProgress(): PracticeEntry[] {
     }
 
     return parsed.filter(
-      (item): item is PracticeEntry =>
-        typeof item === "object" &&
-        item !== null &&
-        typeof item.slug === "string" &&
-        typeof item.title === "string" &&
-        typeof item.category === "string" &&
-        typeof item.duration === "number" &&
-        typeof item.completedAt === "string"
+      (item: unknown): item is PracticeEntry => {
+        if (typeof item !== "object" || item === null) {
+          return false;
+        }
+
+        const entry = item as Record<string, unknown>;
+
+        return (
+          typeof entry.slug === "string" &&
+          typeof entry.title === "string" &&
+          typeof entry.category === "string" &&
+          typeof entry.duration === "number" &&
+          typeof entry.completedAt === "string"
+        );
+      }
     );
   } catch {
     return [];
@@ -76,6 +87,34 @@ function getActivityIcon(category: string): string {
     default:
       return "✦";
   }
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+  icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: string;
+}) {
+  return (
+    <div className="rounded-[24px] border border-[#E8E8DF] bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-md">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <span className="text-sm text-[#899184]">{label}</span>
+
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EDF1E9] text-lg text-[#526653]">
+          {icon}
+        </span>
+      </div>
+
+      <p className="text-3xl font-semibold tracking-tight">{value}</p>
+
+      <p className="mt-2 text-xs text-[#899184]">{detail}</p>
+    </div>
+  );
 }
 
 export default function ProgressPage() {
@@ -134,7 +173,7 @@ export default function ProgressPage() {
     return startOfDay(completedDate).getTime() === today.getTime();
   });
 
-  const chartData = WEEKDAYS.map((day, index) => {
+  const chartData: ChartDay[] = WEEKDAYS.map((day, index) => {
     const date = weekStart ? new Date(weekStart) : null;
 
     if (date) {
@@ -159,7 +198,6 @@ export default function ProgressPage() {
       day,
       date,
       minutes: sessions.reduce((total, entry) => total + entry.duration, 0),
-      count: sessions.length,
     };
   });
 
@@ -189,7 +227,7 @@ export default function ProgressPage() {
   return (
     <main className="min-h-screen bg-[#F8F7F2] text-[#263A2D]">
       <header className="sticky top-0 z-20 border-b border-[#E8E8DF] bg-[#F8F7F2]/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5">
           <a href="/" className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#DCE5D8] text-xl text-[#355640]">
               ✳
@@ -209,10 +247,7 @@ export default function ProgressPage() {
               Favorites
             </a>
 
-            <a
-              href="/progress"
-              className="font-semibold text-[#355640]"
-            >
+            <a href="/progress" className="font-semibold text-[#355640]">
               Progress
             </a>
 
@@ -344,7 +379,7 @@ export default function ProgressPage() {
               })}
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-4 text-sm text-[#899184]">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4 text-sm text-[#899184]">
               <span>
                 {weeklyEntries.length}{" "}
                 {weeklyEntries.length === 1 ? "session" : "sessions"} this week
@@ -462,33 +497,5 @@ export default function ProgressPage() {
         </footer>
       </section>
     </main>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  detail,
-  icon,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-[#E8E8DF] bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-md">
-      <div className="mb-5 flex items-center justify-between">
-        <span className="text-sm text-[#899184]">{label}</span>
-
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EDF1E9] text-lg text-[#526653]">
-          {icon}
-        </span>
-      </div>
-
-      <p className="text-3xl font-semibold tracking-tight">{value}</p>
-
-      <p className="mt-2 text-xs text-[#899184]">{detail}</p>
-    </div>
   );
 }
