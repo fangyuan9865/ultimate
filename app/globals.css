@@ -1,0 +1,87 @@
+
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #f7f5ef;
+  --foreground: #26382f;
+
+  --surface: #ffffff;
+  --surface-muted: #eeeee5;
+  --border: #e2e4d9;
+
+  --primary: #426b52;
+  --primary-hover: #345640;
+  --accent: #dce8d8;
+
+  --muted: #69766c;
+  --shadow: 0 8px 30px rgba(38, 56, 47, 0.07);
+}
+
+:root.dark {
+  color-scheme: dark;
+  --background: #151c18;
+  --foreground: #edf2eb;
+
+  --surface: #202a23;
+  --surface-muted: #29352c;
+  --border: #3a493d;
+
+  --primary: #a7c9a9;
+  --primary-hover: #c0ddc0;
+  --accent: #304a36;
+
+  --muted: #b0bdb1;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  transition:
+    background-color 220ms ease,
+    color 220ms ease;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
